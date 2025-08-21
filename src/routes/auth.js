@@ -1,11 +1,10 @@
 const express = require('express');
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
 const { body, validationResult } = require('express-validator');
-const User = require('../models/User');
+const AuthService = require('../services/AuthService');
 const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
+const authService = new AuthService();
 
 /**
  * @route POST /api/auth/register
@@ -40,62 +39,27 @@ router.post('/register', [
       });
     }
 
-    const { username, email, password, fullName, bio, location, website, company } = req.body;
+    const result = await authService.registerUser(req.body);
 
-    // Check if username already exists
-    const existingUsername = await User.findOne({ username });
-    if (existingUsername) {
+    res.status(201).json({
+      message: 'User registered successfully',
+      ...result
+    });
+
+  } catch (error) {
+    console.error('User registration error:', error);
+    
+    if (error.message === 'Username already exists') {
       return res.status(409).json({
         error: 'Username already exists',
         message: 'This username is already taken. Please choose a different one.'
       });
     }
 
-    // Check if email already exists
-    const existingEmail = await User.findOne({ email });
-    if (existingEmail) {
+    if (error.message === 'Email already exists') {
       return res.status(409).json({
         error: 'Email already exists',
         message: 'This email is already registered. Please use a different email or login.'
-      });
-    }
-
-    // Create new user
-    const user = new User({
-      username,
-      email,
-      password,
-      fullName,
-      bio: bio || '',
-      location: location || '',
-      website: website || '',
-      company: company || ''
-    });
-
-    await user.save();
-
-    // Generate JWT token
-    const token = jwt.sign(
-      { userId: user._id },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
-    );
-
-    // Return user data (without password) and token
-    res.status(201).json({
-      message: 'User registered successfully',
-      user: user.getPublicProfile(),
-      token
-    });
-
-  } catch (error) {
-    console.error('User registration error:', error);
-    
-    if (error.code === 11000) {
-      const field = Object.keys(error.keyValue)[0];
-      return res.status(409).json({
-        error: `${field} already exists`,
-        message: `This ${field} is already taken. Please choose a different one.`
       });
     }
     
@@ -132,45 +96,11 @@ router.post('/login', [
 
     const { username, password } = req.body;
 
-    // Find user by username or email
-    const user = await User.findOne({
-      $or: [
-        { username: username.toLowerCase() },
-        { email: username.toLowerCase() }
-      ]
-    });
-
-    if (!user) {
-      return res.status(401).json({
-        error: 'Invalid credentials',
-        message: 'Username/email or password is incorrect'
-      });
-    }
-
-    // Check password
-    const isPasswordValid = await user.comparePassword(password);
-    if (!isPasswordValid) {
-      return res.status(401).json({
-        error: 'Invalid credentials',
-        message: 'Username/email or password is incorrect'
-      });
-    }
-
-    // Generate JWT token
-    const token = jwt.sign(
-      { userId: user._id },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
-    );
-
-    // Update last login (optional)
-    user.lastLogin = new Date();
-    await user.save();
+    const result = await authService.loginUser(username, password);
 
     res.json({
       message: 'Login successful',
-      user: user.getPublicProfile(),
-      token
+      ...result
     });
 
   } catch (error) {
@@ -191,17 +121,12 @@ router.post('/refresh', authenticateToken, async (req, res) => {
   try {
     const user = req.user;
 
-    // Generate new JWT token
-    const token = jwt.sign(
-      { userId: user._id },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
-    );
+    const result = await authService.refreshToken(user._id);
 
     res.json({
       message: 'Token refreshed successfully',
       user: user.getPublicProfile(),
-      token
+      ...result
     });
 
   } catch (error) {
@@ -288,18 +213,7 @@ router.post('/change-password', [
     const { currentPassword, newPassword } = req.body;
     const user = req.user;
 
-    // Verify current password
-    const isCurrentPasswordValid = await user.comparePassword(currentPassword);
-    if (!isCurrentPasswordValid) {
-      return res.status(401).json({
-        error: 'Invalid password',
-        message: 'Current password is incorrect'
-      });
-    }
-
-    // Update password
-    user.password = newPassword;
-    await user.save();
+    const result = await authService.changePassword(user._id, currentPassword, newPassword);
 
     res.json({
       message: 'Password changed successfully',

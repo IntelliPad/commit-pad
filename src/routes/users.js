@@ -1,10 +1,10 @@
 const express = require('express');
 const { body, validationResult, query } = require('express-validator');
-const User = require('../models/User');
-const Repository = require('../models/Repository');
+const UserService = require('../services/UserService');
 const { authenticateToken, checkUserAccess } = require('../middleware/auth');
 
 const router = express.Router();
+const userService = new UserService();
 
 /**
  * @route GET /api/users
@@ -52,59 +52,9 @@ router.get('/', [
       order = 'asc'
     } = req.query;
 
-    // Build filter object
-    const filter = { isPublic: true };
+    const result = await userService.getUsers(req.query);
 
-    if (search) {
-      filter.$or = [
-        { username: { $regex: search, $options: 'i' } },
-        { fullName: { $regex: search, $options: 'i' } },
-        { bio: { $regex: search, $options: 'i' } }
-      ];
-    }
-
-    // Build sort object
-    let sortObj = {};
-    switch (sort) {
-      case 'username':
-        sortObj.username = order === 'asc' ? 1 : -1;
-        break;
-      case 'created':
-        sortObj.createdAt = order === 'asc' ? 1 : -1;
-        break;
-      case 'repositories':
-        sortObj.repositoryCount = order === 'asc' ? 1 : -1;
-        break;
-      case 'followers':
-        sortObj.followerCount = order === 'asc' ? 1 : -1;
-        break;
-      default:
-        sortObj.username = 1;
-    }
-
-    // Execute query with pagination
-    const skip = (page - 1) * limit;
-    
-    const users = await User.find(filter)
-      .select('username fullName bio avatar location company followerCount followingCount repositoryCount createdAt')
-      .sort(sortObj)
-      .skip(skip)
-      .limit(parseInt(limit));
-
-    const total = await User.countDocuments(filter);
-    const totalPages = Math.ceil(total / limit);
-
-    res.json({
-      users,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        totalPages,
-        hasNext: page < totalPages,
-        hasPrev: page > 1
-      }
-    });
+    res.json(result);
 
   } catch (error) {
     console.error('User retrieval error:', error);
@@ -124,18 +74,7 @@ router.get('/:username', async (req, res) => {
   try {
     const { username } = req.params;
     
-    const user = await User.findOne({ username })
-      .populate('followers', 'username fullName avatar')
-      .populate('following', 'username fullName avatar')
-      .populate('repositories', 'name description isPrivate language starCount forkCount createdAt')
-      .populate('starredRepositories', 'name description isPrivate language starCount forkCount createdAt');
-
-    if (!user) {
-      return res.status(404).json({
-        error: 'User not found',
-        message: 'The specified user does not exist'
-      });
-    }
+    const user = await userService.getUserProfile(username);
 
     // Check if user is viewing their own profile
     const isOwnProfile = req.user && req.user._id.toString() === user._id.toString();
