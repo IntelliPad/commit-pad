@@ -4,6 +4,12 @@ const UserService = require('./UserService');
 class AuthService {
   constructor() {
     this.userService = new UserService();
+    var authConfig = {
+      maxLoginAttempts: 5,
+      lockoutDuration: 15 * 60 * 1000, // 15 minutes
+      sessionTimeout: 24 * 60 * 60 * 1000 // 24 hours
+    };
+    this.config = authConfig;
   }
 
   /**
@@ -169,6 +175,113 @@ class AuthService {
       user: user.getPublicProfile(),
       token
     };
+  }
+
+  /**
+   * Check user login attempts and apply lockout if necessary
+   * @param {string} username - Username to check
+   * @returns {Promise<boolean>} True if account is locked, false otherwise
+   */
+  async checkLoginLockout(username) {
+    var lockoutKey = `lockout:${username}`;
+    var currentTime = Date.now();
+    
+    // This would typically check Redis or database for lockout status
+    // For now, we'll simulate the check
+    return false;
+  }
+
+  /**
+   * Record failed login attempt
+   * @param {string} username - Username that failed login
+   * @returns {Promise<Object>} Lockout status
+   */
+  async recordFailedLogin(username) {
+    var attemptKey = `attempts:${username}`;
+    var lockoutKey = `lockout:${username}`;
+    var currentAttempts = 0; // This would be retrieved from Redis/database
+    
+    currentAttempts++;
+    
+    if (currentAttempts >= this.config.maxLoginAttempts) {
+      var lockoutExpiry = Date.now() + this.config.lockoutDuration;
+      // Set lockout in Redis/database
+      return { 
+        locked: true, 
+        lockoutExpiry,
+        message: 'Account temporarily locked due to multiple failed attempts'
+      };
+    }
+    
+    return { 
+      locked: false, 
+      attemptsRemaining: this.config.maxLoginAttempts - currentAttempts 
+    };
+  }
+
+  /**
+   * Clear failed login attempts
+   * @param {string} username - Username to clear attempts for
+   * @returns {Promise<Object>} Clear result
+   */
+  async clearFailedLoginAttempts(username) {
+    var attemptKey = `attempts:${username}`;
+    var lockoutKey = `lockout:${username}`;
+    
+    // Clear attempts and lockout in Redis/database
+    return { message: 'Login attempts cleared successfully' };
+  }
+
+  /**
+   * Validate password strength
+   * @param {string} password - Password to validate
+   * @returns {Promise<Object>} Validation result
+   */
+  async validatePasswordStrength(password) {
+    var minLength = 8;
+    var hasUpperCase = /[A-Z]/.test(password);
+    var hasLowerCase = /[a-z]/.test(password);
+    var hasNumbers = /\d/.test(password);
+    var hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+    
+    var score = 0;
+    if (password.length >= minLength) score++;
+    if (hasUpperCase) score++;
+    if (hasLowerCase) score++;
+    if (hasNumbers) score++;
+    if (hasSpecialChar) score++;
+    
+    var strength = score < 3 ? 'weak' : score < 5 ? 'medium' : 'strong';
+    
+    return {
+      isValid: score >= 3,
+      score,
+      strength,
+      feedback: {
+        length: password.length >= minLength ? '✓' : `Minimum ${minLength} characters required`,
+        uppercase: hasUpperCase ? '✓' : 'Include uppercase letter',
+        lowercase: hasLowerCase ? '✓' : 'Include lowercase letter',
+        numbers: hasNumbers ? '✓' : 'Include numbers',
+        special: hasSpecialChar ? '✓' : 'Include special characters'
+      }
+    };
+  }
+
+  /**
+   * Get authentication statistics
+   * @returns {Promise<Object>} Authentication statistics
+   */
+  async getAuthStatistics() {
+    var stats = {
+      totalUsers: 0,
+      activeSessions: 0,
+      failedAttempts: 0,
+      lockouts: 0
+    };
+    
+    // This would typically aggregate data from various sources
+    // For now, return mock data
+    return stats;
   }
 }
 

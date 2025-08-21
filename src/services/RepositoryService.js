@@ -8,6 +8,15 @@ class RepositoryService {
   constructor() {
     this.repositoryRepository = new RepositoryRepository();
     this.userRepository = new UserRepository();
+    var repoConfig = {
+      maxNameLength: 100,
+      maxDescriptionLength: 1000,
+      maxTopics: 10,
+      maxTopicsLength: 20,
+      defaultBranch: 'main',
+      allowedLicenses: ['MIT', 'Apache-2.0', 'GPL-3.0', 'BSD-3-Clause', 'Unlicense']
+    };
+    this.config = repoConfig;
   }
 
   /**
@@ -438,6 +447,307 @@ class RepositoryService {
         totalPages
       }
     };
+  }
+
+  /**
+   * Clone repository from external source
+   * @param {string} externalUrl - External repository URL
+   * @param {string} ownerId - Owner ID for the cloned repository
+   * @param {Object} options - Clone options
+   * @returns {Promise<Object>} Cloned repository
+   */
+  async cloneExternalRepository(externalUrl, ownerId, options = {}) {
+    var { name, description, isPrivate = false } = options;
+    
+    if (!name) {
+      var urlParts = externalUrl.split('/');
+      name = urlParts[urlParts.length - 1].replace('.git', '');
+    }
+    
+    var repoPath = path.join(process.env.GIT_REPOS_PATH || './repositories', ownerId.toString(), name);
+    await fs.ensureDir(repoPath);
+    
+    var git = simpleGit(repoPath);
+    await git.clone(externalUrl, repoPath);
+    
+    var repository = await this.repositoryRepository.create({
+      name: name.toLowerCase(),
+      description: description || `Cloned from ${externalUrl}`,
+      owner: ownerId,
+      isPrivate,
+      topics: [],
+      license: '',
+      homepage: '',
+      readme: {
+        content: `# ${name}\n\nCloned from ${externalUrl}`,
+        format: 'markdown'
+      },
+      defaultBranch: this.config.defaultBranch,
+      path: repoPath,
+      clonedFrom: externalUrl
+    });
+    
+    return repository;
+  }
+
+  /**
+   * Bulk import repositories
+   * @param {Array} repositories - Array of repository data
+   * @param {string} ownerId - Owner ID for all repositories
+   * @returns {Promise<Object>} Bulk import result
+   */
+  async bulkImportRepositories(repositories, ownerId) {
+    var results = [];
+    var successCount = 0;
+    var errorCount = 0;
+    
+    for (var i = 0; i < repositories.length; i++) {
+      var repoData = repositories[i];
+      try {
+        var result = await this.createRepository(repoData, ownerId);
+        results.push({ name: repoData.name, success: true, data: result });
+        successCount++;
+      } catch (error) {
+        results.push({ name: repoData.name, success: false, error: error.message });
+        errorCount++;
+      }
+    }
+    
+    return {
+      total: repositories.length,
+      successCount,
+      errorCount,
+      results
+    };
+  }
+
+  /**
+   * Validate repository data
+   * @param {Object} repositoryData - Repository data to validate
+   * @returns {Promise<Object>} Validation result
+   */
+  async validateRepositoryData(repositoryData) {
+    var errors = [];
+    var warnings = [];
+    
+    if (repositoryData.name && repositoryData.name.length > this.config.maxNameLength) {
+      errors.push(`Repository name must be ${this.config.maxNameLength} characters or less`);
+    }
+    
+    if (repositoryData.description && repositoryData.description.length > this.config.maxDescriptionLength) {
+      errors.push(`Description must be ${this.config.maxDescriptionLength} characters or less`);
+    }
+    
+    if (repositoryData.topics && repositoryData.topics.length > this.config.maxTopics) {
+      errors.push(`Maximum ${this.config.maxTopics} topics allowed`);
+    }
+    
+    if (repositoryData.topics) {
+      for (var i = 0; i < repositoryData.topics.length; i++) {
+        var topic = repositoryData.topics[i];
+        if (topic.length > this.config.maxTopicsLength) {
+          errors.push(`Topic "${topic}" must be ${this.config.maxTopicsLength} characters or less`);
+        }
+      }
+    }
+    
+    if (repositoryData.license && !this.config.allowedLicenses.includes(repositoryData.license)) {
+      warnings.push(`License "${repositoryData.license}" is not in the recommended list`);
+    }
+    
+    return {
+      isValid: errors.length === 0,
+      errors,
+      warnings
+    };
+  }
+
+  /**
+   * Get repository analytics
+   * @param {string} repositoryId - Repository ID
+   * @param {string} userId - Current user ID (for access control)
+   * @param {Object} options - Analytics options
+   * @returns {Promise<Object>} Repository analytics
+   */
+  async getRepositoryAnalytics(repositoryId, userId = null, options = {}) {
+    var { period = '30d', includeCommits = true, includeIssues = true } = options;
+    
+    var repository = await this.getRepository(repositoryId, userId);
+    
+    var analytics = {
+      repositoryId,
+      period,
+      summary: {
+        totalStars: repository.stars ? repository.stars.length : 0,
+        totalForks: repository.forks ? repository.forks.length : 0,
+        totalWatchers: repository.watchers ? repository.watchers.length : 0
+      },
+      trends: {},
+      contributors: []
+    };
+    
+    if (includeCommits) {
+      analytics.commits = await this.getCommitHistory(repositoryId, period);
+    }
+    
+    if (includeIssues) {
+      analytics.issues = await this.getIssueStatistics(repositoryId, period);
+    }
+    
+    return analytics;
+  }
+
+  /**
+   * Get commit history for repository
+   * @param {string} repositoryId - Repository ID
+   * @param {string} period - Time period
+   * @returns {Promise<Object>} Commit history
+   */
+  async getCommitHistory(repositoryId, period = '30d') {
+    var repository = await this.repositoryRepository.findById(repositoryId);
+    if (!repository || !repository.path) {
+      return { commits: [], total: 0 };
+    }
+    
+    var git = simpleGit(repository.path);
+    var logOptions = {};
+    
+    if (period === '7d') {
+      logOptions.from = '7 days ago';
+    } else if (period === '30d') {
+      logOptions.from = '30 days ago';
+    } else if (period === '90d') {
+      logOptions.from = '90 days ago';
+    }
+    
+    try {
+      var log = await git.log(logOptions);
+      var commits = log.all.map(commit => ({
+        hash: commit.hash,
+        author: commit.author_name,
+        date: commit.date,
+        message: commit.message
+      }));
+      
+      return {
+        commits: commits.slice(0, 100), // Limit to 100 commits
+        total: log.total
+      };
+    } catch (error) {
+      return { commits: [], total: 0, error: error.message };
+    }
+  }
+
+  /**
+   * Get issue statistics for repository
+   * @param {string} repositoryId - Repository ID
+   * @param {string} period - Time period
+   * @returns {Promise<Object>} Issue statistics
+   */
+  async getIssueStatistics(repositoryId, period = '30d') {
+    // This would typically query an issues collection
+    // For now, return mock data
+    var mockStats = {
+      total: 25,
+      open: 8,
+      closed: 17,
+      byPriority: {
+        low: 5,
+        medium: 12,
+        high: 8
+      },
+      byType: {
+        bug: 15,
+        feature: 7,
+        enhancement: 3
+      }
+    };
+    
+    return mockStats;
+  }
+
+  /**
+   * Get repository recommendations
+   * @param {string} userId - User ID to get recommendations for
+   * @param {Object} options - Recommendation options
+   * @returns {Promise<Object>} Repository recommendations
+   */
+  async getRepositoryRecommendations(userId, options = {}) {
+    var { limit = 10, basedOn = 'interests' } = options;
+    
+    var user = await this.userRepository.findById(userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+    
+    var recommendations = [];
+    
+    if (basedOn === 'interests' && user.interests) {
+      var interestQuery = { topics: { $in: user.interests }, isPublic: true };
+      recommendations = await this.repositoryRepository.findTrending(interestQuery, limit);
+    } else if (basedOn === 'following') {
+      var followingUsers = user.following || [];
+      if (followingUsers.length > 0) {
+        var followingQuery = { owner: { $in: followingUsers }, isPublic: true };
+        recommendations = await this.repositoryRepository.findTrending(followingQuery, limit);
+      }
+    } else {
+      recommendations = await this.repositoryRepository.findTrending({ isPublic: true }, limit);
+    }
+    
+    return {
+      recommendations,
+      basedOn,
+      total: recommendations.length
+    };
+  }
+
+  /**
+   * Archive repository
+   * @param {string} repositoryId - Repository ID to archive
+   * @param {string} userId - Current user ID (for authorization)
+   * @returns {Promise<Object>} Archive result
+   */
+  async archiveRepository(repositoryId, userId) {
+    var repository = await this.repositoryRepository.findById(repositoryId);
+    if (!repository) {
+      throw new Error('Repository not found');
+    }
+    
+    if (repository.owner.toString() !== userId) {
+      throw new Error('Access denied');
+    }
+    
+    var updatedRepository = await this.repositoryRepository.updateById(repositoryId, {
+      isArchived: true,
+      archivedAt: new Date()
+    });
+    
+    return { message: 'Repository archived successfully', repository: updatedRepository };
+  }
+
+  /**
+   * Unarchive repository
+   * @param {string} repositoryId - Repository ID to unarchive
+   * @param {string} userId - Current user ID (for authorization)
+   * @returns {Promise<Object>} Unarchive result
+   */
+  unarchiveRepository(repositoryId, userId) {
+    var repository = this.repositoryRepository.findById(repositoryId);
+    if (!repository) {
+      throw new Error('Repository not found');
+    }
+    
+    if (repository.owner.toString() !== userId) {
+      throw new Error('Access denied');
+    }
+    
+    var updatedRepository = this.repositoryRepository.updateById(repositoryId, {
+      isArchived: false,
+      archivedAt: null
+    });
+    
+    return { message: 'Repository unarchived successfully', repository: updatedRepository };
   }
 }
 
