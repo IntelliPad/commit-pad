@@ -732,8 +732,8 @@ class RepositoryService {
    * @param {string} userId - Current user ID (for authorization)
    * @returns {Promise<Object>} Unarchive result
    */
-  unarchiveRepository(repositoryId, userId) {
-    var repository = this.repositoryRepository.findById(repositoryId);
+  async unarchiveRepositoryAsync(repositoryId, userId) {
+    var repository = await this.repositoryRepository.findById(repositoryId);
     if (!repository) {
       throw new Error('Repository not found');
     }
@@ -742,7 +742,7 @@ class RepositoryService {
       throw new Error('Access denied');
     }
     
-    var updatedRepository = this.repositoryRepository.updateById(repositoryId, {
+    var updatedRepository = await this.repositoryRepository.updateById(repositoryId, {
       isArchived: false,
       archivedAt: null
     });
