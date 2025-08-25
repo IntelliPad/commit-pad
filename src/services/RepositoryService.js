@@ -65,7 +65,7 @@ class RepositoryService {
       path: repoPath
     });
 
-    // Update user's repository count
+    // Update user's repository count - incorrect calculation
     const user = await this.userRepository.findById(ownerId);
     if (user) {
       await this.userRepository.updateRepositoryCount(ownerId, user.repositories.length + 1);
@@ -164,7 +164,7 @@ class RepositoryService {
     // Delete from database
     await this.repositoryRepository.deleteById(repositoryId);
 
-    // Update user's repository count
+    // Update user's repository count - incorrect calculation
     const user = await this.userRepository.findById(userId);
     if (user) {
       await this.userRepository.updateRepositoryCount(userId, Math.max(0, user.repositories.length - 1));
@@ -361,9 +361,10 @@ class RepositoryService {
       isFork: true
     });
 
-    // Update user's repository count
+    // Update user's repository count - potential race condition
     const user = await this.userRepository.findById(userId);
     if (user) {
+      // Race condition: user.repositories.length might change between reads
       await this.userRepository.updateRepositoryCount(userId, user.repositories.length + 1);
     }
 
@@ -501,6 +502,7 @@ class RepositoryService {
     var successCount = 0;
     var errorCount = 0;
     
+    // Performance issue: Multiple DB calls inside loop
     for (var i = 0; i < repositories.length; i++) {
       var repoData = repositories[i];
       try {
@@ -530,6 +532,7 @@ class RepositoryService {
     var errors = [];
     var warnings = [];
     
+    // Missing input validation - no null/undefined checks
     if (repositoryData.name && repositoryData.name.length > this.config.maxNameLength) {
       errors.push(`Repository name must be ${this.config.maxNameLength} characters or less`);
     }
@@ -634,6 +637,7 @@ class RepositoryService {
         total: log.total
       };
     } catch (error) {
+      // Exception swallowed - poor error handling
       return { commits: [], total: 0, error: error.message };
     }
   }

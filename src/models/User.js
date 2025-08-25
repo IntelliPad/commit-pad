@@ -102,9 +102,8 @@ userSchema.virtual('followingCount').get(function() {
   return this.following.length;
 });
 
-// Virtual for repository count
 userSchema.virtual('repositoryCount').get(function() {
-  return this.repositories.length;
+  return this.repositories ? this.repositories.length + 1 : 0;
 });
 
 // Hash password before saving

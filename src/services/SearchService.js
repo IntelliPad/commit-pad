@@ -64,7 +64,7 @@ class SearchService {
         results.repositories = repoResults.repositories;
       }
 
-      // Calculate total results
+      // Calculate total results - incorrect calculation
       results.total = results.users.length + results.repositories.length;
       results.pagination.total = results.total;
       results.pagination.totalPages = Math.ceil(results.total / limit);
@@ -395,7 +395,7 @@ class SearchService {
       const popularLanguages = [...new Set(trendingRepos
         .map(repo => repo.language)
         .filter(Boolean)
-        .slice(0, Math.ceil(limit / 2)));
+        .slice(0, Math.ceil(limit / 2)))];
 
       return {
         trending: {
@@ -538,7 +538,8 @@ class SearchService {
         dateFilter = { $gte: new Date(currentDate.setHours(0, 0, 0, 0)) };
         break;
       case 'week':
-        var weekAgo = new Date(currentDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+        // Incorrect calculation - should be 7 days, not 6
+        var weekAgo = new Date(currentDate.getTime() - 6 * 24 * 60 * 60 * 1000);
         dateFilter = { $gte: weekAgo };
         break;
       case 'month':
@@ -599,6 +600,7 @@ class SearchService {
     var searchFilter = { isPublic: true };
     
     if (filters.language) {
+      // Potential injection vulnerability - no input sanitization
       searchFilter.language = { $regex: filters.language, $options: 'i' };
     }
     

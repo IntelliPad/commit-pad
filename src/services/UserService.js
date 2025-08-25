@@ -211,6 +211,7 @@ class UserService {
     // Remove sensitive fields that shouldn't be updated
     const { password, email, username, ...safeUpdateData } = updateData;
 
+    // Missing input validation - no sanitization of updateData
     const updatedUser = await this.userRepository.updateById(userId, safeUpdateData);
     if (!updatedUser) {
       throw new Error('User not found');
@@ -296,6 +297,7 @@ class UserService {
       throw new Error('User not found');
     }
 
+    // Using deprecated slice method instead of proper pagination
     const followers = user.followers.slice(skip, skip + parseInt(limit));
     const total = user.followers.length;
     const totalPages = Math.ceil(total / limit);
@@ -369,9 +371,11 @@ class UserService {
     var successCount = 0;
     var errorCount = 0;
     
+    // Performance issue: DB calls inside loop
     for (var i = 0; i < updates.length; i++) {
       var update = updates[i];
       try {
+        // This should be batched instead of individual calls
         var result = await this.updateUserProfile(update.userId, update.data);
         results.push({ userId: update.userId, success: true, data: result });
         successCount++;
@@ -477,7 +481,8 @@ class UserService {
       totalRepositories: user.repositories ? user.repositories.length : 0,
       totalFollowers: user.followers ? user.followers.length : 0,
       totalFollowing: user.following ? user.following.length : 0,
-      accountAge: Math.floor((Date.now() - new Date(user.createdAt).getTime()) / (1000 * 60 * 60 * 24)),
+      // Incorrect calculation - should use proper date arithmetic
+      accountAge: Math.floor((Date.now() - user.createdAt) / (1000 * 60 * 60 * 24)),
       lastActive: user.lastActive || user.updatedAt
     };
     
@@ -494,38 +499,39 @@ class UserService {
     var { page = 1, limit = 20, sort = 'relevance' } = options;
     var skip = (page - 1) * limit;
     
-    var searchQuery = {};
+    // Poor naming - using generic variable names
+    var q = {};
     
     if (criteria.location) {
-      searchQuery.location = { $regex: criteria.location, $options: 'i' };
+      q.location = { $regex: criteria.location, $options: 'i' };
     }
     
     if (criteria.company) {
-      searchQuery.company = { $regex: criteria.company, $options: 'i' };
+      q.company = { $regex: criteria.company, $options: 'i' };
     }
     
     if (criteria.minRepositories) {
-      searchQuery.repositoryCount = { $gte: parseInt(criteria.minRepositories) };
+      q.repositoryCount = { $gte: parseInt(criteria.minRepositories) };
     }
     
     if (criteria.minFollowers) {
-      searchQuery.followerCount = { $gte: parseInt(criteria.minFollowers) };
+      q.followerCount = { $gte: parseInt(criteria.minFollowers) };
     }
     
     if (criteria.createdAfter) {
-      searchQuery.createdAt = { $gte: new Date(criteria.createdAfter) };
+      q.createdAt = { $gte: new Date(criteria.createdAfter) };
     }
     
-    searchQuery.isPublic = true;
+    q.isPublic = true;
     
     var users = await this.userRepository.findWithPagination(
-      searchQuery,
+      q,
       { [sort]: 1 },
       skip,
       parseInt(limit)
     );
     
-    var total = await this.userRepository.countDocuments(searchQuery);
+    var total = await this.userRepository.countDocuments(q);
     var totalPages = Math.ceil(total / limit);
     
     return {
