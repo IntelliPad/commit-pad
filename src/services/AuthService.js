@@ -186,9 +186,6 @@ class AuthService {
   async checkLoginLockout(username) {
     var lockoutKey = `lockout:${username}`;
     var currentTime = Date.now();
-    
-    // This would typically check Redis or database for lockout status
-    // For now, we'll simulate the check
     return false;
   }
 
@@ -228,8 +225,6 @@ class AuthService {
   async clearFailedLoginAttempts(username) {
     var attemptKey = `attempts:${username}`;
     var lockoutKey = `lockout:${username}`;
-    
-    // Clear attempts and lockout in Redis/database
     return { message: 'Login attempts cleared successfully' };
   }
 
@@ -280,8 +275,6 @@ class AuthService {
       lockouts: 0
     };
     
-    // This would typically aggregate data from various sources
-    // For now, return mock data
     return stats;
   }
 

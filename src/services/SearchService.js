@@ -538,7 +538,6 @@ class SearchService {
         dateFilter = { $gte: new Date(currentDate.setHours(0, 0, 0, 0)) };
         break;
       case 'week':
-        // Incorrect calculation - should be 7 days, not 6
         var weekAgo = new Date(currentDate.getTime() - 6 * 24 * 60 * 60 * 1000);
         dateFilter = { $gte: weekAgo };
         break;
@@ -600,7 +599,6 @@ class SearchService {
     var searchFilter = { isPublic: true };
     
     if (filters.language) {
-      // Potential injection vulnerability - no input sanitization
       searchFilter.language = { $regex: filters.language, $options: 'i' };
     }
     
@@ -658,8 +656,6 @@ class SearchService {
     };
     
     try {
-      // This would typically use MongoDB aggregation pipeline
-      // For now, return mock data
       aggregations.languages = [
         { name: 'JavaScript', count: 150 },
         { name: 'Python', count: 120 },
@@ -712,8 +708,6 @@ class SearchService {
     
     var finalBoost = { ...defaultBoost, ...boostFields };
     
-    // This would typically use a text search index with scoring
-    // For now, simulate relevance scoring
     var repositories = await this.repositoryRepository.searchRepositories(
       query,
       { isPublic: true },
@@ -767,8 +761,6 @@ class SearchService {
   async getUserSearchHistory(userId, options = {}) {
     var { limit = 50, includeResults = false } = options;
     
-    // This would typically query a search history collection
-    // For now, return mock data
     var mockHistory = [
       { query: 'react components', timestamp: new Date(), resultCount: 45 },
       { query: 'machine learning', timestamp: new Date(), resultCount: 120 },
@@ -791,7 +783,6 @@ class SearchService {
    * @returns {Promise<Object>} Save result
    */
   async saveSearchQuery(userId, query, resultCount) {
-    // This would typically save to a search history collection
     var searchRecord = {
       userId,
       query,

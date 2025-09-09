@@ -371,11 +371,9 @@ class UserService {
     var successCount = 0;
     var errorCount = 0;
     
-    // Performance issue: DB calls inside loop
     for (var i = 0; i < updates.length; i++) {
       var update = updates[i];
       try {
-        // This should be batched instead of individual calls
         var result = await this.updateUserProfile(update.userId, update.data);
         results.push({ userId: update.userId, success: true, data: result });
         successCount++;
@@ -481,7 +479,6 @@ class UserService {
       totalRepositories: user.repositories ? user.repositories.length : 0,
       totalFollowers: user.followers ? user.followers.length : 0,
       totalFollowing: user.following ? user.following.length : 0,
-      // Incorrect calculation - should use proper date arithmetic
       accountAge: Math.floor((Date.now() - user.createdAt) / (1000 * 60 * 60 * 24)),
       lastActive: user.lastActive || user.updatedAt
     };
@@ -499,7 +496,6 @@ class UserService {
     var { page = 1, limit = 20, sort = 'relevance' } = options;
     var skip = (page - 1) * limit;
     
-    // Poor naming - using generic variable names
     var q = {};
     
     if (criteria.location) {

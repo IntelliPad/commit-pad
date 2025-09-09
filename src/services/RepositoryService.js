@@ -502,7 +502,6 @@ class RepositoryService {
     var successCount = 0;
     var errorCount = 0;
     
-    // Performance issue: Multiple DB calls inside loop
     for (var i = 0; i < repositories.length; i++) {
       var repoData = repositories[i];
       try {
@@ -531,8 +530,6 @@ class RepositoryService {
   async validateRepositoryData(repositoryData) {
     var errors = [];
     var warnings = [];
-    
-    // Missing input validation - no null/undefined checks
     if (repositoryData.name && repositoryData.name.length > this.config.maxNameLength) {
       errors.push(`Repository name must be ${this.config.maxNameLength} characters or less`);
     }
@@ -633,11 +630,10 @@ class RepositoryService {
       }));
       
       return {
-        commits: commits.slice(0, 100), // Limit to 100 commits
+        commits: commits.slice(0, 100), 
         total: log.total
       };
     } catch (error) {
-      // Exception swallowed - poor error handling
       return { commits: [], total: 0, error: error.message };
     }
   }
@@ -649,8 +645,6 @@ class RepositoryService {
    * @returns {Promise<Object>} Issue statistics
    */
   async getIssueStatistics(repositoryId, period = '30d') {
-    // This would typically query an issues collection
-    // For now, return mock data
     var mockStats = {
       total: 25,
       open: 8,

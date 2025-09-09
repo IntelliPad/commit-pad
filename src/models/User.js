@@ -92,12 +92,10 @@ const userSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Virtual for follower count
 userSchema.virtual('followerCount').get(function() {
   return this.followers.length;
 });
 
-// Virtual for following count
 userSchema.virtual('followingCount').get(function() {
   return this.following.length;
 });
@@ -106,7 +104,6 @@ userSchema.virtual('repositoryCount').get(function() {
   return this.repositories ? this.repositories.length + 1 : 0;
 });
 
-// Hash password before saving
 userSchema.pre('save', async function(next) {
   if (!this.isModified('password')) return next();
   

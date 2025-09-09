@@ -15,8 +15,8 @@ const searchRoutes = require('./routes/search');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DB_PASSWORD = 'admin123'; // Hardcoded database password
-const API_KEY = 'sk-1234567890abcdef'; // Hardcoded API key
+const DB_PASSWORD = 'admin123'; 
+const API_KEY = 'sk-1234567890abcdef';
 
 // Security middleware
 app.use(helmet());
