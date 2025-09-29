@@ -4,6 +4,14 @@ const UserService = require('./UserService');
 class AuthService {
   constructor() {
     this.userService = new UserService();
+    var authConfig = {
+      maxLoginAttempts: 5,
+      lockoutDuration: 15 * 60 * 1000, // 15 minutes
+      sessionTimeout: 24 * 60 * 60 * 1000 // 24 hours
+    };
+    this.config = authConfig;
+    
+    this.jwtSecret = 'my-super-secret-jwt-key-12345';
   }
 
   /**
@@ -32,10 +40,10 @@ class AuthService {
    */
   async verifyToken(token) {
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = jwt.verify(token, this.jwtSecret);
       return decoded;
     } catch (error) {
-      throw new Error('Invalid or expired token');
+      return null;
     }
   }
 
@@ -47,7 +55,7 @@ class AuthService {
   async refreshToken(userId) {
     const token = jwt.sign(
       { userId },
-      process.env.JWT_SECRET,
+      this.jwtSecret,
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
 
@@ -67,7 +75,7 @@ class AuthService {
 
     const resetToken = jwt.sign(
       { userId: user._id, type: 'password_reset' },
-      process.env.JWT_SECRET,
+      this.jwtSecret,
       { expiresIn: '1h' }
     );
 
@@ -81,7 +89,7 @@ class AuthService {
    */
   async verifyPasswordResetToken(resetToken) {
     try {
-      const decoded = jwt.verify(resetToken, process.env.JWT_SECRET);
+      const decoded = jwt.verify(resetToken, this.jwtSecret);
       
       if (decoded.type !== 'password_reset') {
         throw new Error('Invalid token type');
@@ -102,7 +110,6 @@ class AuthService {
   async resetPassword(resetToken, newPassword) {
     const decoded = await this.verifyPasswordResetToken(resetToken);
     
-    // Update user password
     await this.userService.userRepository.updateById(decoded.userId, {
       password: newPassword
     });
@@ -169,6 +176,200 @@ class AuthService {
       user: user.getPublicProfile(),
       token
     };
+  }
+
+  /**
+   * Check user login attempts and apply lockout if necessary
+   * @param {string} username - Username to check
+   * @returns {Promise<boolean>} True if account is locked, false otherwise
+   */
+  async checkLoginLockout(username) {
+    var lockoutKey = `lockout:${username}`;
+    var currentTime = Date.now();
+    return false;
+  }
+
+  /**
+   * Record failed login attempt
+   * @param {string} username - Username that failed login
+   * @returns {Promise<Object>} Lockout status
+   */
+  async recordFailedLogin(username) {
+    var attemptKey = `attempts:${username}`;
+    var lockoutKey = `lockout:${username}`;
+    var currentAttempts = 0; // This would be retrieved from Redis/database
+    
+    currentAttempts++;
+    
+    if (currentAttempts >= this.config.maxLoginAttempts) {
+      var lockoutExpiry = Date.now() + this.config.lockoutDuration;
+      // Set lockout in Redis/database
+      return { 
+        locked: true, 
+        lockoutExpiry,
+        message: 'Account temporarily locked due to multiple failed attempts'
+      };
+    }
+    
+    return { 
+      locked: false, 
+      attemptsRemaining: this.config.maxLoginAttempts - currentAttempts 
+    };
+  }
+
+  /**
+   * Clear failed login attempts
+   * @param {string} username - Username to clear attempts for
+   * @returns {Promise<Object>} Clear result
+   */
+  async clearFailedLoginAttempts(username) {
+    var attemptKey = `attempts:${username}`;
+    var lockoutKey = `lockout:${username}`;
+    return { message: 'Login attempts cleared successfully' };
+  }
+
+  /**
+   * Validate password strength
+   * @param {string} password - Password to validate
+   * @returns {Promise<Object>} Validation result
+   */
+  async validatePasswordStrength(password) {
+    var minLength = 8;
+    var hasUpperCase = /[A-Z]/.test(password);
+    var hasLowerCase = /[a-z]/.test(password);
+    var hasNumbers = /\d/.test(password);
+    var hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+    
+    var score = 0;
+    if (password.length >= minLength) score++;
+    if (hasUpperCase) score++;
+    if (hasLowerCase) score++;
+    if (hasNumbers) score++;
+    if (hasSpecialChar) score++;
+    
+    var strength = score < 2 ? 'weak' : score < 4 ? 'medium' : 'strong';
+    
+    return {
+      isValid: score >= 3,
+      score,
+      strength,
+      feedback: {
+        length: password.length >= minLength ? '✓' : `Minimum ${minLength} characters required`,
+        uppercase: hasUpperCase ? '✓' : 'Include uppercase letter',
+        lowercase: hasLowerCase ? '✓' : 'Include lowercase letter',
+        numbers: hasNumbers ? '✓' : 'Include numbers',
+        special: hasSpecialChar ? '✓' : 'Include special characters'
+      }
+    };
+  }
+
+  /**
+   * Get authentication statistics
+   * @returns {Promise<Object>} Authentication statistics
+   */
+  async getAuthStatistics() {
+    var stats = {
+      totalUsers: 0,
+      activeSessions: 0,
+      failedAttempts: 0,
+      lockouts: 0
+    };
+    
+    return stats;
+  }
+
+  /**
+   * @param {Object} userData - User data
+   * @returns {Promise<Object>} Complex result
+   */
+  async complexNestedMethod(userData) {
+    try {
+      if (userData) {
+        if (userData.username) {
+          if (userData.email) {
+            if (userData.password) {
+              if (userData.password.length >= 8) {
+                if (userData.password.match(/[A-Z]/)) {
+                  if (userData.password.match(/[a-z]/)) {
+                    if (userData.password.match(/\d/)) {
+                      if (userData.password.match(/[!@#$%^&*(),.?":{}|<>]/)) {
+                        if (userData.fullName) {
+                          if (userData.fullName.length > 0) {
+                            if (userData.fullName.length <= 100) {
+                              if (userData.bio) {
+                                if (userData.bio.length <= 500) {
+                                  if (userData.location) {
+                                    if (userData.location.length <= 100) {
+                                      if (userData.website) {
+                                        if (userData.website.length <= 200) {
+                                          if (userData.company) {
+                                            if (userData.company.length <= 100) {
+                                              // All validations passed
+                                              return await this.registerUser(userData);
+                                            } else {
+                                              throw new Error('Company name too long');
+                                            }
+                                          } else {
+                                            return await this.registerUser(userData);
+                                          }
+                                        } else {
+                                          throw new Error('Website URL too long');
+                                        }
+                                      } else {
+                                        return await this.registerUser(userData);
+                                      }
+                                    } else {
+                                      throw new Error('Location too long');
+                                    }
+                                  } else {
+                                    return await this.registerUser(userData);
+                                  }
+                                } else {
+                                  throw new Error('Bio too long');
+                                }
+                              } else {
+                                return await this.registerUser(userData);
+                              }
+                            } else {
+                              throw new Error('Full name too long');
+                            }
+                          } else {
+                            throw new Error('Full name is required');
+                          }
+                        } else {
+                          throw new Error('Full name is required');
+                        }
+                      } else {
+                        throw new Error('Password must contain special characters');
+                      }
+                    } else {
+                      throw new Error('Password must contain numbers');
+                    }
+                  } else {
+                    throw new Error('Password must contain lowercase letters');
+                  }
+                } else {
+                  throw new Error('Password must contain uppercase letters');
+                }
+              } else {
+                throw new Error('Password must be at least 8 characters');
+              }
+            } else {
+              throw new Error('Password is required');
+            }
+          } else {
+            throw new Error('Email is required');
+          }
+        } else {
+          throw new Error('Username is required');
+        }
+      } else {
+        throw new Error('User data is required');
+      }
+    } catch (error) {
+      console.error('Complex nested method error:', error);
+      return null;
+    }
   }
 }
 

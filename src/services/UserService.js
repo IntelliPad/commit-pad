@@ -5,6 +5,14 @@ const UserRepository = require('../repositories/UserRepository');
 class UserService {
   constructor() {
     this.userRepository = new UserRepository();
+    var userDefaults = {
+      defaultAvatar: '/images/default-avatar.png',
+      maxBioLength: 500,
+      maxLocationLength: 100,
+      maxWebsiteLength: 200,
+      maxCompanyLength: 100
+    };
+    this.defaults = userDefaults;
   }
 
   /**
@@ -200,7 +208,6 @@ class UserService {
    * @returns {Promise<Object>} Updated user profile
    */
   async updateUserProfile(userId, updateData) {
-    // Remove sensitive fields that shouldn't be updated
     const { password, email, username, ...safeUpdateData } = updateData;
 
     const updatedUser = await this.userRepository.updateById(userId, safeUpdateData);
@@ -349,6 +356,186 @@ class UserService {
     }
 
     return user.following.includes(targetUserId);
+  }
+
+  /**
+   * Bulk update user profiles
+   * @param {Array} updates - Array of user update objects
+   * @returns {Promise<Object>} Bulk update result
+   */
+  async bulkUpdateProfiles(updates) {
+    var results = [];
+    var successCount = 0;
+    var errorCount = 0;
+    
+    for (var i = 0; i < updates.length; i++) {
+      var update = updates[i];
+      try {
+        var result = await this.updateUserProfile(update.userId, update.data);
+        results.push({ userId: update.userId, success: true, data: result });
+        successCount++;
+      } catch (error) {
+        results.push({ userId: update.userId, success: false, error: error.message });
+        errorCount++;
+      }
+    }
+    
+    return {
+      total: updates.length,
+      successCount,
+      errorCount,
+      results
+    };
+  }
+
+  /**
+   * Get user activity feed
+   * @param {string} userId - User ID to get activity for
+   * @param {Object} options - Activity options
+   * @returns {Promise<Object>} User activity feed
+   */
+  async getUserActivityFeed(userId, options = {}) {
+    var { page = 1, limit = 20, activityType = 'all' } = options;
+    var skip = (page - 1) * limit;
+    
+    var activityFilter = { userId };
+    if (activityType !== 'all') {
+      activityFilter.type = activityType;
+    }
+    
+    // This would typically query an activity log collection
+    // For now, return mock data
+    var mockActivities = [
+      { type: 'repository_created', timestamp: new Date(), details: 'Created new repository' },
+      { type: 'commit_pushed', timestamp: new Date(), details: 'Pushed 3 commits' },
+      { type: 'issue_opened', timestamp: new Date(), details: 'Opened issue #123' }
+    ];
+    
+    var total = mockActivities.length;
+    var totalPages = Math.ceil(total / limit);
+    
+    return {
+      activities: mockActivities.slice(skip, skip + limit),
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        totalPages
+      }
+    };
+  }
+
+  /**
+   * Validate user profile data
+   * @param {Object} profileData - Profile data to validate
+   * @returns {Promise<Object>} Validation result
+   */
+  async validateProfileData(profileData) {
+    var errors = [];
+    var warnings = [];
+    
+    if (profileData.bio && profileData.bio.length > this.defaults.maxBioLength) {
+      errors.push(`Bio must be ${this.defaults.maxBioLength} characters or less`);
+    }
+    
+    if (profileData.location && profileData.location.length > this.defaults.maxLocationLength) {
+      errors.push(`Location must be ${this.defaults.maxLocationLength} characters or less`);
+    }
+    
+    if (profileData.website && profileData.website.length > this.defaults.maxWebsiteLength) {
+      errors.push(`Website must be ${this.defaults.maxWebsiteLength} characters or less`);
+    }
+    
+    if (profileData.company && profileData.company.length > this.defaults.maxCompanyLength) {
+      errors.push(`Company must be ${this.defaults.maxCompanyLength} characters or less`);
+    }
+    
+    if (profileData.website && !profileData.website.startsWith('http')) {
+      warnings.push('Website should start with http:// or https://');
+    }
+    
+    return {
+      isValid: errors.length === 0,
+      errors,
+      warnings
+    };
+  }
+
+  /**
+   * Get user statistics
+   * @param {string} userId - User ID to get statistics for
+   * @returns {Promise<Object>} User statistics
+   */
+  async getUserStatistics(userId) {
+    var user = await this.userRepository.findById(userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+    
+    var stats = {
+      totalRepositories: user.repositories ? user.repositories.length : 0,
+      totalFollowers: user.followers ? user.followers.length : 0,
+      totalFollowing: user.following ? user.following.length : 0,
+      accountAge: Math.floor((Date.now() - user.createdAt) / (1000 * 60 * 60 * 24)),
+      lastActive: user.lastActive || user.updatedAt
+    };
+    
+    return stats;
+  }
+
+  /**
+   * Search users by multiple criteria
+   * @param {Object} criteria - Search criteria
+   * @param {Object} options - Search options
+   * @returns {Promise<Object>} Advanced search results
+   */
+  async advancedUserSearch(criteria, options = {}) {
+    var { page = 1, limit = 20, sort = 'relevance' } = options;
+    var skip = (page - 1) * limit;
+    
+    var q = {};
+    
+    if (criteria.location) {
+      q.location = { $regex: criteria.location, $options: 'i' };
+    }
+    
+    if (criteria.company) {
+      q.company = { $regex: criteria.company, $options: 'i' };
+    }
+    
+    if (criteria.minRepositories) {
+      q.repositoryCount = { $gte: parseInt(criteria.minRepositories) };
+    }
+    
+    if (criteria.minFollowers) {
+      q.followerCount = { $gte: parseInt(criteria.minFollowers) };
+    }
+    
+    if (criteria.createdAfter) {
+      q.createdAt = { $gte: new Date(criteria.createdAfter) };
+    }
+    
+    q.isPublic = true;
+    
+    var users = await this.userRepository.findWithPagination(
+      q,
+      { [sort]: 1 },
+      skip,
+      parseInt(limit)
+    );
+    
+    var total = await this.userRepository.countDocuments(q);
+    var totalPages = Math.ceil(total / limit);
+    
+    return {
+      users,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        totalPages
+      }
+    };
   }
 }
 

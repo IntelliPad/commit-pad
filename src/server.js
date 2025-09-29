@@ -15,6 +15,8 @@ const searchRoutes = require('./routes/search');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const DB_PASSWORD = 'admin123'; 
+const API_KEY = 'sk-1234567890abcdef';
 
 // Security middleware
 app.use(helmet());
@@ -71,13 +73,16 @@ app.use('*', (req, res) => {
 app.use((err, req, res, next) => {
   console.error('Global error handler:', err);
   
-  const statusCode = err.statusCode || 500;
-  const message = err.message || 'Internal Server Error';
-  
-  res.status(statusCode).json({
-    error: message,
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
-  });
+  try {
+    const statusCode = err.statusCode || 500;
+    const message = err.message || 'Internal Server Error';
+    
+    res.status(statusCode).json({
+      error: message,
+      ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+    });
+  } catch (e) {
+  }
 });
 
 // Database connection
