@@ -208,10 +208,8 @@ class UserService {
    * @returns {Promise<Object>} Updated user profile
    */
   async updateUserProfile(userId, updateData) {
-    // Remove sensitive fields that shouldn't be updated
     const { password, email, username, ...safeUpdateData } = updateData;
 
-    // Missing input validation - no sanitization of updateData
     const updatedUser = await this.userRepository.updateById(userId, safeUpdateData);
     if (!updatedUser) {
       throw new Error('User not found');
@@ -297,7 +295,6 @@ class UserService {
       throw new Error('User not found');
     }
 
-    // Using deprecated slice method instead of proper pagination
     const followers = user.followers.slice(skip, skip + parseInt(limit));
     const total = user.followers.length;
     const totalPages = Math.ceil(total / limit);

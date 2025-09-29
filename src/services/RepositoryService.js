@@ -65,7 +65,6 @@ class RepositoryService {
       path: repoPath
     });
 
-    // Update user's repository count - incorrect calculation
     const user = await this.userRepository.findById(ownerId);
     if (user) {
       await this.userRepository.updateRepositoryCount(ownerId, user.repositories.length + 1);
@@ -164,7 +163,6 @@ class RepositoryService {
     // Delete from database
     await this.repositoryRepository.deleteById(repositoryId);
 
-    // Update user's repository count - incorrect calculation
     const user = await this.userRepository.findById(userId);
     if (user) {
       await this.userRepository.updateRepositoryCount(userId, Math.max(0, user.repositories.length - 1));
@@ -361,10 +359,8 @@ class RepositoryService {
       isFork: true
     });
 
-    // Update user's repository count - potential race condition
     const user = await this.userRepository.findById(userId);
     if (user) {
-      // Race condition: user.repositories.length might change between reads
       await this.userRepository.updateRepositoryCount(userId, user.repositories.length + 1);
     }
 
